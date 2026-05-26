@@ -15,9 +15,63 @@ let correctAnswers = 0;
 let currentQuestions = [];
 let mistakes = JSON.parse(localStorage.getItem("mistakes")) || {};
 
+// 🔧 Функция для исправления невалидных экранирований в JSON
+function fixInvalidJsonEscapes(text) {
+  // Заменяем \' на ' (невалидно в JSON)
+  text = text.replace(/\\'/g, "'");
+  // Заменяем другие невалидные экранирования: \x → x (кроме допустимых)
+  text = text.replace(/\\([^"\\/bfnrtu])/g, '$1');
+  return text;
+}
+
+// 🔧 Функция для нормализации ключей объекта (убирает пробелы в концах ключей)
+function normalizeKeys(obj) {
+  if (Array.isArray(obj)) {
+    return obj.map(normalizeKeys);
+  }
+  if (obj && typeof obj === 'object') {
+    const normalized = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const cleanKey = key.trim();
+      normalized[cleanKey] = normalizeKeys(value);
+    }
+    return normalized;
+  }
+  return obj;
+}
+
 async function loadQuestions() {
-  const res = await fetch("./questions.json");
-  questions = await res.json();
+  try {
+    const res = await fetch("./questions.json");
+    
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    
+    // Читаем как текст, чтобы предварительно обработать
+    let text = await res.text();
+    
+    // Исправляем невалидные экранирования
+    text = fixInvalidJsonEscapes(text);
+    
+    // Парсим JSON
+    let data = JSON.parse(text);
+    
+    // Нормализуем ключи (убираем пробелы в концах: "id " → "id")
+    questions = normalizeKeys(data);
+    
+    console.log(`Загружено ${questions.length} вопросов`);
+    
+  } catch (e) {
+    console.error("❌ Ошибка загрузки вопросов:", e.message);
+    app.innerHTML = `
+      <div class="result-screen">
+        <h2>⚠️ Ошибка загрузки</h2>
+        <p>Не удалось загрузить вопросы.</p>
+        <p><small>${e.message}</small></p>
+      </div>
+    `;
+  }
 }
 
 function shuffle(array) {
